@@ -1,8 +1,9 @@
+
 import javax.swing.*;
+
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
-import com.google.gson.*;
 
 public class POSLayout extends JFrame {
     private final List<Order> orders; // 주문 데이터를 저장하는 리스트
@@ -164,7 +165,7 @@ public class POSLayout extends JFrame {
         buttonPanel.add(new JButton("+"));
         buttonPanel.add(new JButton("-"));
 
-        // 주문하기 버튼: 창 닫기 및 메인 화면 갱신 //FIXME: 메뉴 갱신 안되는 부분 수정해야함
+        // 주문하기 버튼: 창 닫기 및 메인 화면 갱신
         JButton submitButton = new JButton("주문하기");
         submitButton.addActionListener(e -> {
             updateMainScreen(); // 메인 화면 갱신
@@ -190,7 +191,7 @@ public class POSLayout extends JFrame {
     }
 
     /**
-     * 메뉴를 테이블에 추가 //FIXME: 메뉴 갱신 안되는 부분 수정해야함
+     * 메뉴를 테이블에 추가
      */
     private void addMenuToTable(int tableNumber, String menuName, int price) {
         boolean menuExists = false;
@@ -239,42 +240,5 @@ public class POSLayout extends JFrame {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new POSLayout());
-    }
-}
-
-/**
- * 주문 데이터를 나타내는 클래스
- */
-class Order {
-    private final int tableNumber;
-    private final String itemName;
-    private int quantity;
-    private final int price;
-
-    public Order(int tableNumber, String itemName, int quantity, int price) {
-        this.tableNumber = tableNumber;
-        this.itemName = itemName;
-        this.quantity = quantity;
-        this.price = price;
-    }
-
-    public int getTableNumber() {
-        return tableNumber;
-    }
-
-    public String getItemName() {
-        return itemName;
-    }
-
-    public int getQuantity() {
-        return quantity;
-    }
-
-    public void setQuantity(int quantity) {
-        this.quantity = quantity;
-    }
-
-    public int getPrice() {
-        return price;
     }
 }
