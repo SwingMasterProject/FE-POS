@@ -1,0 +1,58 @@
+{
+  "message": "テーブルデータの取得に成功しました",
+  "success": true,
+  "tables": [
+    {
+      "_id": "67388543bd662d9843d9e5c4",
+      "tableName": "Table 1",
+      "tableNum": 1,
+      "orderid": [
+        "67388543bd662d9843d9e5c5",
+        "67388f63bd662d9843d9e5d4",
+        "673a908058d0e4871ddbdbe7"
+      ],
+      "lastOrder": [
+        {
+          "menuId": "64f2c63b5297c3e3f4d22222",
+          "name": "test_order",
+          "quantity": 3,
+          "price": 1500
+        },
+        {
+          "menuId": "64f2c63b5297c3e3f4d22222",
+          "name": "test_order",
+          "quantity": 3,
+          "price": 1500
+        }
+      ],
+      "totalPrice": 5000,
+      "status": "pending",
+      "createdAt": "2024-11-16T11:42:59.178Z",
+      "updatedAt": "2024-11-18T00:55:28.941Z"
+    },
+    {
+      "_id": "67388d34bd662d9843d9e5cc",
+      "tableName": "Table 3",
+      "tableNum": 3,
+      "orderid": ["67388d34bd662d9843d9e5cd"],
+      "lastOrder": [
+        {
+          "menuId": "64f2c63b5297c3e3f4d22222",
+          "name": "test",
+          "quantity": 3,
+          "price": 1500
+        },
+        {
+          "menuId": "64f2c63b5297c3e3f4d22222",
+          "name": "test2",
+          "quantity": 32,
+          "price": 1500
+        }
+      ],
+      "totalPrice": 5000,
+      "status": "pending",
+      "createdAt": "2024-11-16T12:16:52.496Z",
+      "updatedAt": "2024-11-16T12:16:52.496Z"
+    }
+  ]
+}
