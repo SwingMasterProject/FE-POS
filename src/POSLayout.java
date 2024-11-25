@@ -1,7 +1,9 @@
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.itextpdf.kernel.pdf.PdfWriter;
 import com.itextpdf.kernel.pdf.PdfDocument;
@@ -13,6 +15,9 @@ public class POSLayout extends JFrame {
     private final List<String> availableMenus; // 추가 가능한 메뉴 목록
     private JPanel orderPanel; // 메인 화면의 주문 목록 패널
     private final List<Integer> reservedTables; // 예약된 테이블 번호 리스트
+    private final List<Integer> avaiablePrices;
+    private final Map<String, Integer> menuWithPrices = new HashMap<>();
+    private int addPrice;
 
     public POSLayout() {
         setTitle("POS System");
@@ -24,6 +29,7 @@ public class POSLayout extends JFrame {
         orders = new ArrayList<>();
         availableMenus = new ArrayList<>();
         reservedTables = new ArrayList<>();
+        avaiablePrices = new ArrayList<>();
         initializeOrders();
         initializeMenus();
 
@@ -63,6 +69,7 @@ public class POSLayout extends JFrame {
         orderPanel.setLayout(new GridLayout(4, 5, 5, 5)); // 4x5 그리드 레이아웃
         orderPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
+        // 테이블 표시
         for (int i = 1; i <= 20; i++) {
             JButton itemPanel = new JButton();
             itemPanel.setLayout(new BorderLayout());
@@ -75,6 +82,7 @@ public class POSLayout extends JFrame {
             itemPanel.add(tableLabel, BorderLayout.NORTH);
             itemPanel.add(orderSummaryLabel, BorderLayout.CENTER);
 
+            // 테이블 정보 업데이트
             boolean hasOrders = false;
             int tableTotal = 0;
             for (Order order : orders) {
@@ -92,7 +100,13 @@ public class POSLayout extends JFrame {
                 }
             }
 
-            // 예약된 테이블은 파란색으로 표시
+            // 새 메뉴 추가
+            menuWithPrices.forEach((menu, price) -> {
+                JLabel menuLabel = new JLabel(menu + ": " + price + "원");
+                orderPanel.add(menuLabel);
+            });
+
+            // 예약된 테이블 색상 변경
             if (reservedTables.contains(i)) {
                 itemPanel.setBackground(Color.cyan);
             } else if (!hasOrders) {
@@ -142,7 +156,7 @@ public class POSLayout extends JFrame {
         for (String menu : availableMenus) {
             JButton menuButton = new JButton(menu);
             menuButton.addActionListener(e -> {
-                addMenuToTable(tableNumber, menu, 10000);
+                addMenuToTable(tableNumber, menu, addPrice);
                 updateMainScreen();
                 detailsFrame.dispose();
                 showOrderDetails(tableNumber);
@@ -264,9 +278,23 @@ public class POSLayout extends JFrame {
     }
 
     private void addMenu() {
+        // 새로운 메뉴 이름 입력받기
         String newMenu = JOptionPane.showInputDialog(this, "새로운 메뉴 이름을 입력하세요:");
         if (newMenu != null && !newMenu.trim().isEmpty()) {
-            availableMenus.add(newMenu);
+            String newPrice = JOptionPane.showInputDialog(this, "메뉴 가격을 입력하세요:");
+            if (newPrice != null && !newPrice.trim().isEmpty()) {
+                try {
+                    int price = Integer.parseInt(newPrice); // 가격을 정수로 변환
+                    menuWithPrices.put(newMenu, price); // 메뉴와 가격 저장
+                    JOptionPane.showMessageDialog(this, "메뉴가 추가되었습니다: " + newMenu + " (" + price + "원)");
+                } catch (NumberFormatException e) {
+                    JOptionPane.showMessageDialog(this, "유효한 숫자를 입력하세요."); // 숫자가 아닌 경우 처리
+                }
+            } else {
+                JOptionPane.showMessageDialog(this, "가격을 입력하세요.");
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, "메뉴 이름을 입력하세요.");
         }
     }
 
