@@ -1,23 +1,26 @@
-import javax.swing.*;
-import java.awt.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import components.MainScreen;
+import components.FunctionPanel;
+import models.Order;
 
-import com.itextpdf.kernel.pdf.PdfWriter;
-import com.itextpdf.kernel.pdf.PdfDocument;
-import com.itextpdf.layout.Document;
-import com.itextpdf.layout.element.Paragraph;
+import javax.swing.*;
+import com.google.gson.Gson;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import java.awt.*;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import okhttp3.*;
 
 public class POSLayout extends JFrame {
-    private final List<Order> orders; // 주문 데이터를 저장하는 리스트
-    private final List<String> availableMenus; // 추가 가능한 메뉴 목록
-    private JPanel orderPanel; // 메인 화면의 주문 목록 패널
-    private final List<Integer> reservedTables; // 예약된 테이블 번호 리스트
-    private final List<Integer> avaiablePrices;
-    private final Map<String, Integer> menuWithPrices = new HashMap<>();
-    private int addPrice;
+    private final List<Order> orders;
+    private final OkHttpClient httpClient = new OkHttpClient();
+    private final Gson gson = new Gson();
+    private MainScreen mainScreen; // 클래스 변수로 선언
+    private static final String BASE_URL = "https://be-api-seven.vercel.app/";
 
     public POSLayout() {
         setTitle("POS System");
@@ -27,301 +30,74 @@ public class POSLayout extends JFrame {
 
         // 주문 데이터 초기화
         orders = new ArrayList<>();
-        availableMenus = new ArrayList<>();
-        reservedTables = new ArrayList<>();
-        avaiablePrices = new ArrayList<>();
-        initializeOrders();
-        initializeMenus();
 
-        // 메인 화면 구성
-        createMainScreen();
+        // MainScreen 초기화
+        mainScreen = new MainScreen(orders);
+        add(mainScreen, BorderLayout.CENTER);
 
-        // 기능 버튼 패널
-        JPanel functionPanel = new JPanel();
-        functionPanel.setLayout(new GridLayout(6, 1, 5, 5));
-        functionPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        String[] functionNames = { "직원 관리", "메뉴 등록", "메뉴 편집", "일일 인기 메뉴", "총 매출액", "요청 사항" };
-        for (String name : functionNames) {
-            JButton functionButton = new JButton(name);
-            functionButton.addActionListener(e -> {
-                if (name.equals("메뉴 등록")) {
-                    addMenu();
-                } else if (name.equals("메뉴 편집")) {
-                    editMenu();
-                }
-            });
-            functionPanel.add(functionButton);
-        }
-
-        add(orderPanel, BorderLayout.CENTER);
+        // FunctionPanel 추가
+        FunctionPanel functionPanel = new FunctionPanel(orders, mainScreen);
         add(functionPanel, BorderLayout.EAST);
+
+        // API 호출로 초기 데이터 가져오기
+        initializeOrders();
 
         setVisible(true);
     }
 
-    private void createMainScreen() {
-        if (orderPanel != null) {
-            remove(orderPanel); // 기존 패널 제거
-        }
-
-        orderPanel = new JPanel();
-        orderPanel.setLayout(new GridLayout(4, 5, 5, 5)); // 4x5 그리드 레이아웃
-        orderPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        // 테이블 표시
-        for (int i = 1; i <= 20; i++) {
-            JButton itemPanel = new JButton();
-            itemPanel.setLayout(new BorderLayout());
-            itemPanel.setBorder(BorderFactory.createLineBorder(Color.GRAY));
-
-            JLabel tableLabel = new JLabel("Table " + i);
-            JLabel orderSummaryLabel = new JLabel("<html><center>No Orders</center></html>");
-            orderSummaryLabel.setHorizontalAlignment(SwingConstants.CENTER);
-
-            itemPanel.add(tableLabel, BorderLayout.NORTH);
-            itemPanel.add(orderSummaryLabel, BorderLayout.CENTER);
-
-            // 테이블 정보 업데이트
-            boolean hasOrders = false;
-            int tableTotal = 0;
-            for (Order order : orders) {
-                if (order.getTableNumber() == i) {
-                    hasOrders = true;
-                    itemPanel.setBackground(Color.PINK);
-
-                    tableTotal += order.getQuantity() * order.getPrice();
-                    orderSummaryLabel.setText(
-                            String.format(
-                                    "<html><center>%s 외 %d개<br>합계: <span style='color:red;'>%d원</span></center></html>",
-                                    order.getItemName(),
-                                    getOrderCountForTable(i) - 1,
-                                    tableTotal));
-                }
-            }
-
-            // 새 메뉴 추가
-            menuWithPrices.forEach((menu, price) -> {
-                JLabel menuLabel = new JLabel(menu + ": " + price + "원");
-                orderPanel.add(menuLabel);
-            });
-
-            // 예약된 테이블 색상 변경
-            if (reservedTables.contains(i)) {
-                itemPanel.setBackground(Color.cyan);
-            } else if (!hasOrders) {
-                itemPanel.setBackground(Color.LIGHT_GRAY);
-            }
-
-            int tableNumber = i;
-            itemPanel.addActionListener(e -> showOrderDetails(tableNumber));
-
-            orderPanel.add(itemPanel);
-        }
-
-        add(orderPanel, BorderLayout.CENTER);
-        revalidate(); // 레이아웃 갱신
-        repaint(); // 화면 다시 그리기
-    }
-
-    private int getOrderCountForTable(int tableNumber) {
-        return (int) orders.stream().filter(order -> order.getTableNumber() == tableNumber).count();
-    }
-
-    private void showOrderDetails(int tableNumber) {
-        JFrame detailsFrame = new JFrame("테이블 세부 내용 - Table " + tableNumber);
-        detailsFrame.setSize(800, 400);
-        detailsFrame.setLayout(new BorderLayout(10, 10));
-
-        JPanel tableInfoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        tableInfoPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        tableInfoPanel.add(new JLabel("Table: " + tableNumber));
-
-        JPanel orderListPanel = new JPanel();
-        orderListPanel.setLayout(new GridLayout(0, 3, 10, 10));
-        orderListPanel.setBorder(BorderFactory.createTitledBorder("주문 목록"));
-
-        int totalAmount = 0;
-        for (Order order : orders) {
-            if (order.getTableNumber() == tableNumber) {
-                orderListPanel.add(new JLabel(order.getItemName()));
-                orderListPanel.add(new JLabel("(" + order.getQuantity() + ")"));
-                orderListPanel.add(new JLabel(order.getPrice() * order.getQuantity() + "원"));
-                totalAmount += order.getPrice() * order.getQuantity();
-            }
-        }
-
-        JPanel menuPanel = new JPanel(new GridLayout(4, 4, 5, 5));
-        menuPanel.setBorder(BorderFactory.createTitledBorder("추가할 메뉴"));
-        for (String menu : availableMenus) {
-            JButton menuButton = new JButton(menu);
-            menuButton.addActionListener(e -> {
-                addMenuToTable(tableNumber, menu, addPrice);
-                updateMainScreen();
-                detailsFrame.dispose();
-                showOrderDetails(tableNumber);
-            });
-            menuPanel.add(menuButton);
-        }
-
-        JPanel bottomPanel = new JPanel(new BorderLayout());
-        bottomPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        JLabel totalLabel = new JLabel("<html>합계: <span style='color:red;'>" + totalAmount + "원</span></html>");
-        totalLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-        bottomPanel.add(totalLabel, BorderLayout.NORTH);
-
-        // 기존 버튼들과 영수증, 예약 버튼 추가
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        JButton cancelButton = new JButton("전체 취소");
-        cancelButton.addActionListener(e -> {
-            clearOrdersForTable(tableNumber);
-            updateMainScreen();
-            detailsFrame.dispose();
-        });
-        buttonPanel.add(cancelButton);
-
-        JButton plusButton = new JButton("+");
-        JButton minusButton = new JButton("-");
-        buttonPanel.add(plusButton);
-        buttonPanel.add(minusButton);
-
-        JButton orderButton = new JButton("주문하기");
-        orderButton.addActionListener(e -> {
-            JOptionPane.showMessageDialog(detailsFrame, "주문이 완료되었습니다!");
-            detailsFrame.dispose();
-        });
-        buttonPanel.add(orderButton);
-
-        JButton receiptButton = new JButton("영수증");
-        receiptButton.addActionListener(e -> {
-            generateReceipt(tableNumber);
-            clearOrdersForTable(tableNumber);
-            updateMainScreen();
-            detailsFrame.dispose();
-        });
-        buttonPanel.add(receiptButton);
-
-        JButton reservationButton = new JButton("예약");
-        reservationButton.addActionListener(e -> {
-            reserveTable(tableNumber); // 테이블 예약 처리
-            updateMainScreen();
-            detailsFrame.dispose();
-        });
-        buttonPanel.add(reservationButton);
-
-        bottomPanel.add(buttonPanel, BorderLayout.CENTER);
-
-        detailsFrame.add(tableInfoPanel, BorderLayout.NORTH);
-        detailsFrame.add(orderListPanel, BorderLayout.CENTER);
-        detailsFrame.add(menuPanel, BorderLayout.EAST);
-        detailsFrame.add(bottomPanel, BorderLayout.SOUTH);
-
-        detailsFrame.setVisible(true);
-    }
-
-    private void reserveTable(int tableNumber) {
-        if (!reservedTables.contains(tableNumber)) {
-            reservedTables.add(tableNumber);
-            JOptionPane.showMessageDialog(this, "Table " + tableNumber + "이(가) 예약되었습니다!");
-        } else {
-            JOptionPane.showMessageDialog(this, "Table " + tableNumber + "은(는) 이미 예약되었습니다.");
-        }
-    }
-
-    private void addMenuToTable(int tableNumber, String menuName, int price) {
-        orders.stream()
-                .filter(order -> order.getTableNumber() == tableNumber && order.getItemName().equals(menuName))
-                .findFirst()
-                .ifPresentOrElse(
-                        order -> order.setQuantity(order.getQuantity() + 1),
-                        () -> orders.add(new Order(tableNumber, menuName, 1, price)));
-    }
-
-    private void updateMainScreen() {
-        createMainScreen();
-    }
-
-    private void generateReceipt(int tableNumber) {
-        try {
-            String fileName = "Receipt_Table_" + tableNumber + ".pdf";
-            PdfWriter writer = new PdfWriter(fileName);
-            PdfDocument pdf = new PdfDocument(writer);
-            Document document = new Document(pdf);
-
-            document.add(new Paragraph("영수증"));
-            document.add(new Paragraph("Table: " + tableNumber));
-            document.add(new Paragraph("----------------------"));
-
-            int totalAmount = 0;
-            for (Order order : orders) {
-                if (order.getTableNumber() == tableNumber) {
-                    document.add(new Paragraph(
-                            String.format("%s x %d = %d원", order.getItemName(), order.getQuantity(),
-                                    order.getQuantity() * order.getPrice())));
-                    totalAmount += order.getQuantity() * order.getPrice();
-                }
-            }
-
-            document.add(new Paragraph("----------------------"));
-            document.add(new Paragraph("총 합계: " + totalAmount + "원"));
-
-            document.close();
-            JOptionPane.showMessageDialog(this, "영수증이 저장되었습니다: " + fileName);
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "영수증 생성 중 오류가 발생했습니다.");
-        }
-    }
-
-    private void clearOrdersForTable(int tableNumber) {
-        orders.removeIf(order -> order.getTableNumber() == tableNumber);
-    }
-
-    private void addMenu() {
-        // 새로운 메뉴 이름 입력받기
-        String newMenu = JOptionPane.showInputDialog(this, "새로운 메뉴 이름을 입력하세요:");
-        if (newMenu != null && !newMenu.trim().isEmpty()) {
-            String newPrice = JOptionPane.showInputDialog(this, "메뉴 가격을 입력하세요:");
-            if (newPrice != null && !newPrice.trim().isEmpty()) {
-                try {
-                    int price = Integer.parseInt(newPrice); // 가격을 정수로 변환
-                    menuWithPrices.put(newMenu, price); // 메뉴와 가격 저장
-                    JOptionPane.showMessageDialog(this, "메뉴가 추가되었습니다: " + newMenu + " (" + price + "원)");
-                } catch (NumberFormatException e) {
-                    JOptionPane.showMessageDialog(this, "유효한 숫자를 입력하세요."); // 숫자가 아닌 경우 처리
-                }
-            } else {
-                JOptionPane.showMessageDialog(this, "가격을 입력하세요.");
-            }
-        } else {
-            JOptionPane.showMessageDialog(this, "메뉴 이름을 입력하세요.");
-        }
-    }
-
-    private void editMenu() {
-        String menuToEdit = (String) JOptionPane.showInputDialog(this, "수정할 메뉴를 선택하세요:", "메뉴 수정",
-                JOptionPane.PLAIN_MESSAGE, null, availableMenus.toArray(), null);
-        if (menuToEdit != null) {
-            String newName = JOptionPane.showInputDialog(this, "새로운 메뉴 이름을 입력하세요:", menuToEdit);
-            if (newName != null && !newName.trim().isEmpty()) {
-                availableMenus.set(availableMenus.indexOf(menuToEdit), newName);
-            }
-        }
-    }
-
     private void initializeOrders() {
-        orders.add(new Order(1, "김치찌개", 2, 12000));
-        orders.add(new Order(1, "삼겹살", 2, 13000));
-        orders.add(new Order(3, "된장찌개", 1, 8000));
-        orders.add(new Order(5, "비빔밥", 1, 10000));
-    }
+        Request request = new Request.Builder()
+                .url(BASE_URL + "api/table")
+                .get()
+                .build();
 
-    private void initializeMenus() {
-        availableMenus.add("김치찌개");
-        availableMenus.add("된장찌개");
-        availableMenus.add("비빔밥");
-        availableMenus.add("불고기");
-        availableMenus.add("삼겹살");
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
+                        null, "주문 데이터를 불러오지 못했습니다: " + e.getMessage()));
+                e.printStackTrace();
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (response.isSuccessful()) {
+                    String responseBody = response.body().string();
+                    JsonObject jsonObject = gson.fromJson(responseBody, JsonObject.class);
+                    JsonArray tableData = jsonObject.getAsJsonArray("tables");
+
+                    SwingUtilities.invokeLater(() -> {
+                        orders.clear(); // 기존 데이터 초기화
+
+                        // 테이블 데이터 처리
+                        for (JsonElement element : tableData) {
+                            JsonObject tableObject = element.getAsJsonObject();
+                            int tableNum = tableObject.get("tableNum").getAsInt();
+                            JsonArray lastOrder = tableObject.getAsJsonArray("lastOrder");
+
+                            if (lastOrder != null) {
+                                for (JsonElement orderElement : lastOrder) {
+                                    JsonObject orderObject = orderElement.getAsJsonObject();
+                                    String itemName = orderObject.get("name").getAsString();
+                                    int quantity = orderObject.get("quantity").getAsInt();
+                                    int price = orderObject.get("price").getAsInt();
+
+                                    // `orders`에 추가
+                                    orders.add(new Order(tableNum, itemName, quantity, price));
+                                }
+                            }
+                        }
+
+                        // UI 갱신
+                        if (mainScreen != null) {
+                            mainScreen.updateTable(-1, new ArrayList<>(orders)); // 전체 갱신
+                        }
+                    });
+                } else {
+                    System.out.println("API 응답 실패: " + response.message());
+                }
+            }
+        });
     }
 
     public static void main(String[] args) {

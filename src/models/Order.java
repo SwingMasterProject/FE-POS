@@ -1,9 +1,12 @@
-public class Order {
-    private final int tableNumber;
-    private final String itemName;
-    private int quantity;
-    private final int price;
+package models;
 
+public class Order {
+    private int tableNumber;
+    private String itemName;
+    private int quantity;
+    private int price;
+
+    // 생성자 및 getter/setter 추가
     public Order(int tableNumber, String itemName, int quantity, int price) {
         this.tableNumber = tableNumber;
         this.itemName = itemName;
@@ -11,6 +14,7 @@ public class Order {
         this.price = price;
     }
 
+    // Getter
     public int getTableNumber() {
         return tableNumber;
     }
@@ -23,11 +27,11 @@ public class Order {
         return quantity;
     }
 
-    public void setQuantity(int quantity) {
-        this.quantity = quantity;
-    }
-
     public int getPrice() {
         return price;
+    }
+
+    public void setQuantity(int quantity) {
+        this.quantity = quantity;
     }
 }
