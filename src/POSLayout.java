@@ -70,20 +70,45 @@ public class POSLayout extends JFrame {
                         orders.clear(); // 기존 데이터 초기화
 
                         // 테이블 데이터 처리
+                        // 테이블 데이터 처리
                         for (JsonElement element : tableData) {
+                            if (!element.isJsonObject()) {
+                                System.out.println("Invalid table data: not a JSON object.");
+                                continue;
+                            }
+
                             JsonObject tableObject = element.getAsJsonObject();
-                            int tableNum = tableObject.get("tableNum").getAsInt();
+                            int tableNum = tableObject.has("tableNum") ? tableObject.get("tableNum").getAsInt() : -1; // 테이블
+                                                                                                                      // 번호
+                                                                                                                      // 기본값
+
+                            if (!tableObject.has("lastOrder") || !tableObject.get("lastOrder").isJsonArray()) {
+                                System.out.println("Invalid table data: 'lastOrder' is missing or not a JSON array.");
+                                continue;
+                            }
+
                             JsonArray lastOrder = tableObject.getAsJsonArray("lastOrder");
 
-                            if (lastOrder != null) {
-                                for (JsonElement orderElement : lastOrder) {
-                                    JsonObject orderObject = orderElement.getAsJsonObject();
+                            for (JsonElement orderElement : lastOrder) {
+                                if (!orderElement.isJsonObject()) {
+                                    System.out.println("Invalid order data: not a JSON object.");
+                                    continue;
+                                }
+
+                                JsonObject orderObject = orderElement.getAsJsonObject();
+
+                                if (orderObject.has("name") && orderObject.has("quantity")
+                                        && orderObject.has("price")) {
                                     String itemName = orderObject.get("name").getAsString();
+                                    String menuId = orderObject.has("menuId") ? orderObject.get("menuId").getAsString()
+                                            : null; // 메뉴 ID 처리
                                     int quantity = orderObject.get("quantity").getAsInt();
                                     int price = orderObject.get("price").getAsInt();
 
                                     // `orders`에 추가
-                                    orders.add(new Order(tableNum, itemName, quantity, price));
+                                    orders.add(new Order(tableNum, menuId, itemName, quantity, price));
+                                } else {
+                                    System.out.println("Invalid order object: missing required fields.");
                                 }
                             }
                         }

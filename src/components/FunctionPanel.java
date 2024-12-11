@@ -6,6 +6,9 @@ import models.Order;
 import javax.swing.*;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 import java.awt.*;
 import java.io.IOException;
@@ -26,14 +29,13 @@ public class FunctionPanel extends JPanel {
     private static final OkHttpClient httpClient = new OkHttpClient();
     private static final Gson gson = new Gson();
 
-    public FunctionPanel(
-            List<Order> orders, MainScreen mainScreen) {
+    public FunctionPanel(List<Order> orders, MainScreen mainScreen) {
         this.orders = orders;
         availableMenus = new ArrayList<>();
-        setLayout(new GridLayout(5, 1, 5, 5));
+        setLayout(new GridLayout(4, 1, 5, 5));
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        String[] functionNames = { "직원 관리", "메뉴 편집", "일일 인기 메뉴", "총 매출액", "요청 사항" };
+        String[] functionNames = { "직원 관리", "현재 인기 메뉴", "현재 매출액", "요청 사항" };
         for (String name : functionNames) {
             JButton functionButton = new JButton(name);
             functionButton.addActionListener(e -> handleFunction(name, orders));
@@ -46,47 +48,116 @@ public class FunctionPanel extends JPanel {
             case "직원 관리":
                 manageEmployees();
                 break;
-            case "메뉴 편집":
-                editMenu();
-                break;
-            case "일일 인기 메뉴":
+            case "현재 인기 메뉴":
                 showPopularMenu(orders);
                 break;
-            case "총 매출액":
+            case "현재 매출액":
                 showTotalSales(orders);
                 break;
             case "요청 사항":
-                JOptionPane.showMessageDialog(this, "요청 사항 기능은 현재 준비 중입니다!");
+                showAllRequests();
                 break;
             default:
                 JOptionPane.showMessageDialog(this, "알 수 없는 기능입니다.");
         }
     }
 
-    private void editMenu() {
-        String menuToEdit = (String) JOptionPane.showInputDialog(this, "수정할 메뉴를 선택하세요:", "메뉴 수정",
-                JOptionPane.PLAIN_MESSAGE, null, availableMenus.toArray(), null);
-        if (menuToEdit != null) {
-            String newName = JOptionPane.showInputDialog(this, "새로운 메뉴 이름을 입력하세요:", menuToEdit);
-            if (newName != null && !newName.trim().isEmpty()) {
-                availableMenus.set(availableMenus.indexOf(menuToEdit), newName);
+    private void showAllRequests() {
+        Request request = new Request.Builder()
+                .url(BASE_URL + "api/request")
+                .get()
+                .build();
 
-                // 가격 수정 추가
-                String newPrice = JOptionPane.showInputDialog(this, "새로운 메뉴 가격을 입력하세요:",
-                        menuWithPrices.get(menuToEdit));
-                if (newPrice != null && !newPrice.trim().isEmpty()) {
-                    try {
-                        int price = Integer.parseInt(newPrice);
-                        menuWithPrices.put(newName, price); // 메뉴 이름 변경에 따른 가격 업데이트
-                        JOptionPane.showMessageDialog(this, "메뉴가 수정되었습니다: " + newName + " (" + price + "원)");
-                    } catch (NumberFormatException e) {
-                        JOptionPane.showMessageDialog(this, "유효한 숫자를 입력하세요.");
-                    }
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                SwingUtilities.invokeLater(
+                        () -> JOptionPane.showMessageDialog(null, "요청사항 데이터를 불러오는데 실패했습니다: " + e.getMessage()));
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (response.isSuccessful()) {
+                    String responseBody = response.body().string();
+                    JsonObject jsonResponse = gson.fromJson(responseBody, JsonObject.class);
+                    JsonArray requestArray = jsonResponse.getAsJsonArray("data");
+
+                    SwingUtilities.invokeLater(() -> {
+                        if (requestArray == null || requestArray.size() == 0) {
+                            displayEmptyRequestsUI(); // 요청사항이 없을 경우 처리
+                        } else {
+                            displayRequestsUI(requestArray); // 요청사항 표시
+                        }
+                    });
+                } else {
+                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null,
+                            "요청사항 데이터를 불러오는데 실패했습니다: " + response.message()));
                 }
-            } else {
-                JOptionPane.showMessageDialog(this, "메뉴 이름을 입력하세요.");
+            }
+        });
+    }
+
+    private void displayEmptyRequestsUI() {
+        // 요청사항이 없을 경우 빈 화면 표시
+        JFrame emptyRequestFrame = new JFrame("요청사항 리스트");
+        emptyRequestFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        emptyRequestFrame.setSize(500, 400);
+
+        JLabel emptyMessageLabel = new JLabel("<html>요청사항이 없습니다.</html>", SwingConstants.CENTER);
+        emptyMessageLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        emptyRequestFrame.add(emptyMessageLabel);
+
+        emptyRequestFrame.setVisible(true);
+    }
+
+    private void displayRequestsUI(JsonArray requestArray) {
+        JFrame requestFrame = new JFrame("요청사항 리스트");
+        requestFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        requestFrame.setSize(500, 400);
+        requestFrame.setLayout(new BorderLayout());
+
+        // 요청사항 리스트 패널 생성
+        JPanel requestListPanel = new JPanel();
+        requestListPanel.setLayout(new BoxLayout(requestListPanel, BoxLayout.Y_AXIS));
+
+        // 요청사항 데이터 출력
+        for (JsonElement requestElement : requestArray) {
+            JsonObject requestObj = requestElement.getAsJsonObject();
+            int tableNum = requestObj.get("tableNum").getAsInt();
+            JsonArray requests = requestObj.getAsJsonArray("requests");
+
+            for (JsonElement element : requests) {
+                JsonObject requestDetail = element.getAsJsonObject();
+                String requestName = requestDetail.get("name").getAsString();
+
+                // 요청사항 항목 생성
+                JPanel requestItemPanel = new JPanel(new BorderLayout());
+                requestItemPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
+                JLabel requestLabel = new JLabel("Table " + tableNum + ": " + requestName);
+                JButton completeButton = new JButton("완료");
+
+                completeButton.addActionListener(e -> {
+                    completeButton.setEnabled(false);
+                    requestItemPanel.setBackground(Color.LIGHT_GRAY);
+                    completeButton.setText("완료됨");
+                });
+
+                requestItemPanel.add(requestLabel, BorderLayout.CENTER);
+                requestItemPanel.add(completeButton, BorderLayout.EAST);
+
+                requestListPanel.add(requestItemPanel);
             }
         }
+
+        // 스크롤 가능하도록 설정
+        JScrollPane scrollPane = new JScrollPane(requestListPanel);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+
+        // 프레임에 스크롤 패널 추가
+        requestFrame.add(scrollPane, BorderLayout.CENTER);
+        requestFrame.setVisible(true);
     }
 
     private void showPopularMenu(List<Order> orderList) {
@@ -99,14 +170,14 @@ public class FunctionPanel extends JPanel {
                 .max(Map.Entry.comparingByValue())
                 .map(Map.Entry::getKey)
                 .orElse("No Orders");
-        JOptionPane.showMessageDialog(this, "오늘의 인기 메뉴: " + popularMenu);
+        JOptionPane.showMessageDialog(this, "현재 인기 메뉴: " + popularMenu);
     }
 
     private void showTotalSales(List<Order> orderList) {
         int totalSales = orders.stream()
                 .mapToInt(order -> order.getQuantity() * order.getPrice())
                 .sum();
-        JOptionPane.showMessageDialog(this, "총 매출액: " + totalSales + "원");
+        JOptionPane.showMessageDialog(this, "현재 매출액: " + totalSales + "원");
     }
 
     private void manageEmployees() {

@@ -1,109 +1,11 @@
 {
-  "tables": [
+  "_id": "674412ad3ea45e956cb152dd",
+  "tableNum": 3,
+  "requests": [
     {
-      "tableNumber": 1,
-      "orders": [
-        { "itemName": "김치찌개", "quantity": 2, "price": 12000 },
-        { "itemName": "삼겹살", "quantity": 2, "price": 13000 }
-      ]
-    },
-    {
-      "tableNumber": 2,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 3,
-      "orders": [
-        { "itemName": "된장찌개", "quantity": 1, "price": 8000 },
-        { "itemName": "비빔밥", "quantity": 1, "price": 10000 }
-      ]
-    },
-    {
-      "tableNumber": 4,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 5,
-      "orders": [
-        { "itemName": "비빔밥", "quantity": 1, "price": 10000 }
-      ]
-    },
-    {
-      "tableNumber": 6,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 7,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 8,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 9,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 10,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 11,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 12,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 13,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 14,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 15,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 16,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 17,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 18,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 19,
-      "orders": [
-      ]
-    },
-    {
-      "tableNumber": 20,
-      "orders": [
-      ]
+      "id": "64f1c8e5678abc12345d9f01",
+      "name": "물 가지고 와주세요",
+      "_id": "674412ad3ea45e956cb152de"
     }
   ]
 }

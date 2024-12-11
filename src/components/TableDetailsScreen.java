@@ -91,9 +91,16 @@ public class TableDetailsScreen extends JFrame {
             int price = menuWithPrices.getOrDefault(menu, 0);
             JButton menuButton = new JButton("<html>" + menu + "<br>" + price + "원</html>");
             menuButton.addActionListener(e -> {
-                orders.add(new Order(tableNumber, menu, 1, price));
-                refreshScreen(tableNumber);
+                String menuId = menuWithIds.get(menu); // menuId 가져오기
+                if (menuId != null) { // menuId가 존재하는지 확인
+                    System.out.println("Selected Menu: " + menu + ", Menu ID: " + menuId); // 디버깅 출력
+                    orders.add(new Order(tableNumber, menuId, menu, 1, price)); // menuId 포함 생성자 사용
+                    refreshScreen(tableNumber);
+                } else {
+                    JOptionPane.showMessageDialog(this, "선택한 메뉴의 ID를 찾을 수 없습니다: " + menu);
+                }
             });
+
             menuPanel.add(menuButton);
         }
 
@@ -145,39 +152,50 @@ public class TableDetailsScreen extends JFrame {
     }
 
     private void sendOrdersToServer(int tableNumber) {
-        // 테이블 번호에 해당하는 주문만 필터링
-        List<Order> tableOrders = new ArrayList<>();
+        List<Map<String, Object>> orderItems = new ArrayList<>();
+        int totalPrice = 0;
+
         for (Order order : orders) {
             if (order.getTableNumber() == tableNumber) {
-                tableOrders.add(order);
+                Map<String, Object> orderEntry = new HashMap<>();
+                orderEntry.put("menuId", order.getMenuId()); // menuId 추가
+                orderEntry.put("name", order.getItemName());
+                orderEntry.put("quantity", order.getQuantity());
+                orderEntry.put("price", order.getPrice());
+                orderItems.add(orderEntry);
+
+                totalPrice += order.getPrice() * order.getQuantity();
             }
         }
 
-        // JSON 변환
-        String jsonData = gson.toJson(tableOrders);
+        Map<String, Object> orderData = new HashMap<>();
+        orderData.put("orderItems", orderItems);
+        orderData.put("totalPrice", totalPrice);
 
-        // API 요청 생성
+        String jsonData = gson.toJson(orderData);
+        System.out.println("Generated JSON: " + jsonData);
+
         RequestBody body = RequestBody.create(jsonData, MediaType.get("application/json"));
         Request request = new Request.Builder()
-                .url(BASE_URL + "api/table/status") // 주문 API 엔드포인트
+                .url(BASE_URL + "api/table/new_order?tableNum=" + tableNumber)
                 .post(body)
                 .build();
 
-        // API 호출
         httpClient.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
-                SwingUtilities
-                        .invokeLater(() -> JOptionPane.showMessageDialog(null, "주문 데이터 전송 실패: " + e.getMessage()));
+                System.err.println("주문 데이터 전송 실패: " + e.getMessage()); // 터미널에 실패 메시지 출력
             }
 
             @Override
             public void onResponse(Call call, Response response) throws IOException {
+                String responseBody = response.body() != null ? response.body().string() : "No Response Body";
+                System.out.println("Response Code: " + response.code());
+                System.out.println("Response Body: " + responseBody);
                 if (response.isSuccessful()) {
-                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null, "주문이 성공적으로 저장되었습니다!"));
+                    System.out.println("주문이 성공적으로 저장되었습니다! 응답: " + responseBody); // 성공 메시지 출력
                 } else {
-                    SwingUtilities.invokeLater(
-                            () -> JOptionPane.showMessageDialog(null, "주문 데이터 전송 실패: " + response.message()));
+                    System.err.println("주문 데이터 전송 실패: " + response.code() + " 응답: " + responseBody); // 실패 메시지 출력
                 }
             }
         });
@@ -247,24 +265,33 @@ public class TableDetailsScreen extends JFrame {
             public void onResponse(Call call, Response response) throws IOException {
                 if (response.isSuccessful()) {
                     String responseBody = response.body().string();
+                    System.out.println("Menu API Response: " + responseBody); // 응답 데이터 디버깅
                     JsonObject jsonObject = gson.fromJson(responseBody, JsonObject.class);
                     JsonArray menuArray = jsonObject.getAsJsonArray("menuItems");
 
                     SwingUtilities.invokeLater(() -> {
                         availableMenus.clear();
                         menuWithPrices.clear();
+                        menuWithIds.clear();
 
                         for (int i = 0; i < menuArray.size(); i++) {
                             JsonObject menuItem = menuArray.get(i).getAsJsonObject();
                             String menuName = menuItem.get("name").getAsString();
+                            String menuId = menuItem.get("_id").getAsString(); // `_id` 필드로 수정
                             int menuPrice = menuItem.get("price").getAsInt();
 
                             availableMenus.add(menuName);
                             menuWithPrices.put(menuName, menuPrice);
+                            menuWithIds.put(menuName, menuId); // menuWithIds에 저장
                         }
+
+                        System.out.println("Available Menus: " + availableMenus); // 메뉴 디버깅
+                        System.out.println("Menu IDs: " + menuWithIds); // menuId 매핑 디버깅
 
                         onComplete.run();
                     });
+                } else {
+                    System.out.println("Menu API Response Failed: " + response.message());
                 }
             }
         });
