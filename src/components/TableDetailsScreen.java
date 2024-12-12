@@ -13,6 +13,8 @@ import com.itextpdf.layout.element.Paragraph;
 import javax.swing.*;
 import java.awt.*;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -125,6 +127,7 @@ public class TableDetailsScreen extends JFrame {
         JButton receiptButton = new JButton("영수증");
         receiptButton.addActionListener(e -> {
             generateReceipt(tableNumber);
+            sendTableOrderComplete(tableNumber);
             clearOrdersForTable(tableNumber);
             mainScreen.updateTable(tableNumber, new ArrayList<>(orders));
             dispose();
@@ -299,47 +302,114 @@ public class TableDetailsScreen extends JFrame {
 
     private void generateReceipt(int tableNumber) {
         try {
-            // PDF 파일 이름 설정
-            String fileName = "Receipt_Table_" + tableNumber + ".pdf";
+            // PDF 파일 저장 경로 설정
+            String directoryPath = "./Receipt/";
+            String fileName = directoryPath + "Receipt_Table_" + tableNumber + ".pdf";
 
-            // PdfWriter와 PdfDocument 생성
+            // 디렉토리 존재 여부 확인 및 생성
+            java.io.File directory = new java.io.File(directoryPath);
+            if (!directory.exists()) {
+                if (!directory.mkdirs()) {
+                    JOptionPane.showMessageDialog(this, "디렉토리를 생성할 수 없습니다: " + directoryPath);
+                    return;
+                }
+            }
+
             PdfWriter writer = new PdfWriter(fileName);
             PdfDocument pdf = new PdfDocument(writer);
 
             // Document 생성
             Document document = new Document(pdf);
 
-            // PDF 내용 작성
-            document.add(new Paragraph("영수증").setBold().setFontSize(16));
-            document.add(new Paragraph("Table: " + tableNumber));
+            // 현재 날짜와 시간 가져오기
+            String dateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+
+            // 헤더 추가
+            document.add(new Paragraph("Restaurant Receipt").setBold().setFontSize(18)
+                    .setTextAlignment(com.itextpdf.layout.property.TextAlignment.CENTER));
+            document.add(new Paragraph("Date: " + dateTime)
+                    .setTextAlignment(com.itextpdf.layout.property.TextAlignment.RIGHT));
+            document.add(new Paragraph("Table: " + tableNumber)
+                    .setTextAlignment(com.itextpdf.layout.property.TextAlignment.LEFT));
             document.add(new Paragraph("----------------------"));
+
+            // 테이블 형식으로 영수증 데이터 추가
+            com.itextpdf.layout.element.Table table = new com.itextpdf.layout.element.Table(3);
+            table.addCell(new Paragraph("Item").setBold());
+            table.addCell(new Paragraph("Quantity").setBold());
+            table.addCell(new Paragraph("Price").setBold());
 
             int totalAmount = 0;
             for (Order order : orders) {
                 if (order.getTableNumber() == tableNumber) {
-                    // 주문 항목 추가 (메뉴명, 수량, 가격을 모두 표시)
-                    String orderDetails = String.format(
-                            "%s x %d = %d원", // 메뉴명 x 수량 = 총 가격
-                            order.getItemName(),
-                            order.getQuantity(),
-                            order.getQuantity() * order.getPrice());
-                    document.add(new Paragraph(orderDetails)); // PDF에 추가
+                    table.addCell(order.getItemName());
+                    table.addCell(String.valueOf(order.getQuantity()));
+                    table.addCell(String.format("%d 원", order.getQuantity() * order.getPrice()));
                     totalAmount += order.getQuantity() * order.getPrice();
                 }
             }
 
-            // 총 합계 추가
+            document.add(table);
             document.add(new Paragraph("----------------------"));
-            document.add(new Paragraph("총 합계: " + totalAmount + "원").setBold());
+
+            // 총 합계 표시
+            document.add(new Paragraph("Total: " + totalAmount + " 원").setBold().setFontSize(14)
+                    .setTextAlignment(com.itextpdf.layout.property.TextAlignment.RIGHT));
 
             // Document 닫기
             document.close();
 
             // PDF 생성 성공 메시지
-            JOptionPane.showMessageDialog(this, "영수증이 저장되었습니다: " + fileName);
+            JOptionPane.showMessageDialog(this, "Receipt has been saved: " + fileName);
         } catch (Exception e) {
             // 오류 메시지 표시
-            JOptionPane.showMessageDialog(this, "영수증 생성 중 오류가 발생했습니다: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "Error generating receipt: " + e.getMessage());
         }
+    }
+
+    // 테이블 주문 완료 API 호출 메서드 추가
+    private void sendTableOrderComplete(int tableNumber) {
+        // API URL 설정
+        String apiUrl = BASE_URL + "api/table?tableNum=" + tableNumber;
+
+        // 요청 데이터 설정 (필요 시 추가 데이터 포함 가능)
+        Map<String, Object> requestData = new HashMap<>();
+        requestData.put("tableNum", tableNumber); // 테이블 번호를 요청 데이터로 포함
+
+        String jsonData = gson.toJson(requestData);
+
+        // 요청 본문 생성
+        RequestBody body = RequestBody.create(jsonData, MediaType.get("application/json"));
+
+        // 요청 생성
+        Request request = new Request.Builder()
+                .url(apiUrl)
+                .delete(body) // DELETE 메서드 사용
+                .build();
+
+        // 비동기 호출
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                System.err.println("테이블 주문 삭제 실패: " + e.getMessage());
+                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
+                        null, "테이블 주문 데이터 전송 실패: " + e.getMessage()));
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                String responseBody = response.body() != null ? response.body().string() : "No Response Body";
+                System.out.println("API 응답 코드: " + response.code());
+                System.out.println("API 응답 내용: " + responseBody);
+
+                SwingUtilities.invokeLater(() -> {
+                    if (response.isSuccessful()) {
+                        JOptionPane.showMessageDialog(null, "테이블 결게가 완료 돼었습니다!");
+                    } else {
+                        JOptionPane.showMessageDialog(null, "테이블 주문 데이터 삭제 실패: " + response.message());
+                    }
+                });
+            }
+        });
     }
 }
