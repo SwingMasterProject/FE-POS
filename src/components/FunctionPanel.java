@@ -18,6 +18,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
+
 import okhttp3.*;
 
 public class FunctionPanel extends JPanel {
@@ -28,6 +30,7 @@ public class FunctionPanel extends JPanel {
     private static final String BASE_URL = "https://be-api-seven.vercel.app/";
     private static final OkHttpClient httpClient = new OkHttpClient();
     private static final Gson gson = new Gson();
+    private JTextArea employeeListArea;
 
     public FunctionPanel(List<Order> orders, MainScreen mainScreen) {
         this.orders = orders;
@@ -46,7 +49,8 @@ public class FunctionPanel extends JPanel {
     private void handleFunction(String name, List<Order> orderList) {
         switch (name) {
             case "직원 관리":
-                manageEmployees();
+                EmployeeManager employeeManager = new EmployeeManager();
+                employeeManager.manageEmployees();
                 break;
             case "현재 인기 메뉴":
                 showPopularMenu(orders);
@@ -59,6 +63,312 @@ public class FunctionPanel extends JPanel {
                 break;
             default:
                 JOptionPane.showMessageDialog(this, "알 수 없는 기능입니다.");
+        }
+    }
+
+    public class EmployeeManager {
+        private static final String BASE_URL = "https://be-api-seven.vercel.app/";
+        private static final String RECORDS_URL = "https://be-api-takaaaans-projects.vercel.app/api/time-records";
+        private static final OkHttpClient httpClient = new OkHttpClient();
+        private static final Gson gson = new Gson();
+        private JTextArea employeeListArea;
+        private JTextArea attendanceRecordsArea;
+
+        public void manageEmployees() {
+            JFrame frame = new JFrame("직원 관리");
+            frame.setSize(600, 800);
+            frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+            frame.setLayout(new BorderLayout());
+
+            JPanel inputPanel = new JPanel();
+            JTextField nameField = new JTextField(20);
+            String[] actions = { "직원 등록", "출근", "퇴근", "출퇴근 기록 조회" };
+            JComboBox<String> actionSelector = new JComboBox<>(actions);
+            JButton actionButton = new JButton("확인");
+
+            inputPanel.add(new JLabel("이름:"));
+            inputPanel.add(nameField);
+            inputPanel.add(actionSelector);
+            inputPanel.add(actionButton);
+
+            employeeListArea = new JTextArea(10, 40);
+            attendanceRecordsArea = new JTextArea(15, 40);
+            JScrollPane employeeScroll = new JScrollPane(employeeListArea);
+            JScrollPane attendanceScroll = new JScrollPane(attendanceRecordsArea);
+
+            employeeListArea.setEditable(false);
+            attendanceRecordsArea.setEditable(false);
+
+            JPanel listPanel = new JPanel();
+            listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+            listPanel.add(new JLabel("직원 리스트"));
+            listPanel.add(employeeScroll);
+            listPanel.add(new JLabel("출퇴근 기록"));
+            listPanel.add(attendanceScroll);
+
+            frame.add(inputPanel, BorderLayout.NORTH);
+            frame.add(listPanel, BorderLayout.CENTER);
+
+            actionButton.addActionListener(e -> {
+                String name = nameField.getText().trim();
+                String action = (String) actionSelector.getSelectedItem();
+
+                if (name.isEmpty()) {
+                    JOptionPane.showMessageDialog(frame, "이름을 입력해주세요.");
+                    return;
+                }
+
+                switch (action) {
+                    case "직원 등록":
+                        registerEmployee(name);
+                        break;
+                    case "출근":
+                        handleClockAction(name, "clock-in");
+                        break;
+                    case "퇴근":
+                        handleClockAction(name, "clock-out");
+                        break;
+                    case "출퇴근 기록 조회":
+                        fetchAttendanceRecordsByName(name, attendanceRecordsArea);
+                        break;
+                }
+            });
+
+            updateEmployeeList();
+            frame.setVisible(true);
+        }
+
+        private void registerEmployee(String name) {
+            Request request = new Request.Builder()
+                    .url(BASE_URL + "api/user?name=" + name)
+                    .post(RequestBody.create("", MediaType.get("application/json")))
+                    .build();
+
+            httpClient.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(Call call, IOException e) {
+                    showError("직원 등록 실패", e.getMessage());
+                }
+
+                @Override
+                public void onResponse(Call call, Response response) throws IOException {
+                    if (response.isSuccessful()) {
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(null, name + "님이 등록되었습니다.");
+                            updateEmployeeList();
+                        });
+                    } else {
+                        showError("직원 등록 실패", response.message());
+                    }
+                }
+            });
+        }
+
+        private void handleClockAction(String name, String action) {
+            fetchUserId(name, userId -> {
+                String url = BASE_URL + "api/time-records/" + action + "?user_id=" + userId;
+                Request request = new Request.Builder()
+                        .url(url)
+                        .post(RequestBody.create("", MediaType.get("application/json")))
+                        .build();
+
+                httpClient.newCall(request).enqueue(new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+                        showError(action.equals("clock-in") ? "출근 실패" : "퇴근 실패", e.getMessage());
+                    }
+
+                    @Override
+                    public void onResponse(Call call, Response response) throws IOException {
+                        if (response.isSuccessful()) {
+                            SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null,
+                                    action.equals("clock-in") ? "출근 성공" : "퇴근 성공"));
+                        } else {
+                            showError(action.equals("clock-in") ? "출근 실패" : "퇴근 실패", response.message());
+                        }
+                    }
+                });
+            });
+        }
+
+        private void fetchAttendanceRecordsByName(String name, JTextArea attendanceRecordsArea) {
+            fetchUserId(name, userId -> {
+                if (userId == null || userId.isEmpty()) {
+                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null, "해당 이름의 직원 ID를 찾을 수 없습니다."));
+                    return;
+                }
+
+                String startDate = "2024-01-01"; // 기본 시작 날짜
+                String endDate = "2024-12-31"; // 기본 종료 날짜
+                String url = BASE_URL + "api/time-records?start_date=" + startDate + "T00:00:00.000Z"
+                        + "&end_date=" + endDate + "T23:59:59.000Z&user_id=" + userId;
+
+                Request request = new Request.Builder()
+                        .url(url)
+                        .get()
+                        .build();
+
+                httpClient.newCall(request).enqueue(new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+                        SwingUtilities.invokeLater(
+                                () -> attendanceRecordsArea.setText("출퇴근 기록을 불러오는데 실패했습니다: " + e.getMessage()));
+                    }
+
+                    @Override
+                    public void onResponse(Call call, Response response) throws IOException {
+                        String responseBody = response.body().string();
+                        System.out.println("Attendance Records Response: " + responseBody); // 디버깅용
+
+                        if (response.isSuccessful()) {
+                            try {
+                                JsonObject jsonResponse = gson.fromJson(responseBody, JsonObject.class);
+                                JsonArray records = jsonResponse.getAsJsonArray("records");
+
+                                if (records == null || records.size() == 0) {
+                                    SwingUtilities.invokeLater(() -> attendanceRecordsArea.setText("출퇴근 기록이 없습니다."));
+                                    return;
+                                }
+
+                                StringBuilder recordDetails = new StringBuilder("출퇴근 기록:\n");
+
+                                for (JsonElement recordElement : records) {
+                                    JsonObject record = recordElement.getAsJsonObject();
+                                    String clockIn = record.has("clock_in") ? record.get("clock_in").getAsString()
+                                            : "출근 기록 없음";
+                                    String clockOut = record.has("clock_out") ? record.get("clock_out").getAsString()
+                                            : "퇴근 기록 없음";
+                                    double workingHours = record.has("total_working_hours")
+                                            ? record.get("total_working_hours").getAsDouble()
+                                            : 0.0;
+
+                                    recordDetails.append("출근: ").append(clockIn)
+                                            .append(", 퇴근: ").append(clockOut)
+                                            .append(", 근무 시간: ").append(String.format("%.2f", workingHours))
+                                            .append("시간")
+                                            .append("\n");
+                                }
+
+                                double totalHours = jsonResponse.has("total_working_hours")
+                                        ? jsonResponse.get("total_working_hours").getAsDouble()
+                                        : 0.0;
+
+                                recordDetails.append("\n총 근무 시간: ").append(String.format("%.2f", totalHours))
+                                        .append("시간");
+
+                                SwingUtilities
+                                        .invokeLater(() -> attendanceRecordsArea.setText(recordDetails.toString()));
+                            } catch (Exception e) {
+                                SwingUtilities.invokeLater(
+                                        () -> attendanceRecordsArea.setText("응답 처리 중 오류 발생: " + e.getMessage()));
+                            }
+                        } else {
+                            SwingUtilities.invokeLater(
+                                    () -> attendanceRecordsArea.setText("출퇴근 기록 조회 실패: " + response.message()));
+                        }
+                    }
+                });
+            });
+        }
+
+        private void fetchUserId(String name, java.util.function.Consumer<String> callback) {
+            String url = BASE_URL + "api/user";
+
+            Request request = new Request.Builder()
+                    .url(url)
+                    .get()
+                    .build();
+
+            httpClient.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(Call call, IOException e) {
+                    SwingUtilities
+                            .invokeLater(() -> JOptionPane.showMessageDialog(null, "유저 ID 조회 실패: " + e.getMessage()));
+                }
+
+                @Override
+                public void onResponse(Call call, Response response) throws IOException {
+                    String responseBody = response.body().string();
+                    System.out.println("fetchUserId response: " + responseBody); // 디버깅 메시지
+
+                    if (response.isSuccessful()) {
+                        try {
+                            JsonObject jsonResponse = gson.fromJson(responseBody, JsonObject.class);
+
+                            // 응답 데이터에서 `users` 배열 확인
+                            if (jsonResponse.has("users") && jsonResponse.get("users").isJsonArray()) {
+                                JsonArray users = jsonResponse.getAsJsonArray("users");
+
+                                // `users` 배열에서 이름에 해당하는 데이터를 찾음
+                                for (JsonElement userElement : users) {
+                                    JsonObject user = userElement.getAsJsonObject();
+                                    String userName = user.get("name").getAsString();
+
+                                    if (userName.equals(name)) {
+                                        String userId = user.get("_id").getAsString();
+                                        SwingUtilities.invokeLater(() -> callback.accept(userId));
+                                        return;
+                                    }
+                                }
+
+                                // 이름에 해당하는 데이터가 없을 경우
+                                SwingUtilities.invokeLater(
+                                        () -> JOptionPane.showMessageDialog(null, "해당 이름의 사용자를 찾을 수 없습니다."));
+                            } else {
+                                SwingUtilities
+                                        .invokeLater(() -> JOptionPane.showMessageDialog(null, "사용자 데이터가 잘못되었습니다."));
+                            }
+                        } catch (Exception e) {
+                            SwingUtilities.invokeLater(
+                                    () -> JOptionPane.showMessageDialog(null, "응답 파싱 중 오류 발생: " + e.getMessage()));
+                        }
+                    } else {
+                        SwingUtilities.invokeLater(
+                                () -> JOptionPane.showMessageDialog(null, "유저 ID 조회 실패: " + response.message()));
+                    }
+                }
+            });
+        }
+
+        private void updateEmployeeList() {
+            Request request = new Request.Builder()
+                    .url(BASE_URL + "api/user")
+                    .get()
+                    .build();
+
+            httpClient.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(Call call, IOException e) {
+                    showError("직원 리스트 업데이트 실패", e.getMessage());
+                }
+
+                @Override
+                public void onResponse(Call call, Response response) throws IOException {
+                    if (response.isSuccessful()) {
+                        String responseBody = response.body().string();
+                        JsonObject jsonResponse = gson.fromJson(responseBody, JsonObject.class);
+                        JsonArray users = jsonResponse.getAsJsonArray("users");
+
+                        if (users != null && users.size() > 0) {
+                            StringBuilder list = new StringBuilder();
+                            for (JsonElement userElement : users) {
+                                JsonObject user = userElement.getAsJsonObject();
+                                String userName = user.get("name").getAsString();
+                                list.append(userName).append("\n");
+                            }
+                            SwingUtilities.invokeLater(() -> employeeListArea.setText(list.toString()));
+                        } else {
+                            SwingUtilities.invokeLater(() -> employeeListArea.setText("등록된 직원이 없습니다."));
+                        }
+                    } else {
+                        showError("직원 리스트 업데이트 실패", response.message());
+                    }
+                }
+            });
+        }
+
+        private void showError(String title, String message) {
+            SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null, title + ": " + message));
         }
     }
 
@@ -201,130 +511,5 @@ public class FunctionPanel extends JPanel {
                 .mapToInt(order -> order.getQuantity() * order.getPrice())
                 .sum();
         JOptionPane.showMessageDialog(this, "현재 매출액: " + totalSales + "원");
-    }
-
-    private void manageEmployees() {
-        String[] options = { "출근", "퇴근", "출퇴근 기록 보기" };
-        String choice = (String) JOptionPane.showInputDialog(this, "직원 관리", "직원관리", JOptionPane.PLAIN_MESSAGE, null,
-                options, options[0]);
-        if ("출근".equals(choice)) {
-            checkInEmployee();
-        } else if ("퇴근".equals(choice)) {
-            checkOutEmployee();
-        } else if ("출퇴근 기록 보기".equals(choice)) {
-            viewEmployeeRecords();
-        }
-    }
-
-    // TODO: 유저 id 값 줘야함
-    private void checkInEmployee() {
-        String name = JOptionPane.showInputDialog(this, "이름을 입력하시오: ");
-        if (name != null && !name.trim().isEmpty()) {
-            Employee employee = new Employee(name, LocalDateTime.now(), null);
-            employees.add(employee);
-            sendEmployeeDataToServer(employee, "api/time-records/clock-in");
-            JOptionPane.showMessageDialog(this, name + " 출근 등록 완료");
-        } else {
-            JOptionPane.showMessageDialog(this, "이름을 입력하시오: ");
-        }
-    }
-
-    private void checkOutEmployee() {
-        String name = JOptionPane.showInputDialog(this, "퇴근자의 이름을 입력하시오: ");
-        if (name != null && !name.trim().isEmpty()) {
-            Employee employee = employees.stream()
-                    .filter(e -> e.getName().equals(name) && e.getCheckOutTime() == null)
-                    .findFirst()
-                    .orElse(null);
-
-            if (employee != null) {
-                employee.setCheckOutTime(LocalDateTime.now());
-                sendEmployeeDataToServer(employee, "api/time-records/clock-out");
-                JOptionPane.showMessageDialog(this, name + " 퇴근 등록 완료");
-            } else {
-                JOptionPane.showMessageDialog(this, "출근 기록이 없거나 이미 퇴근했습니다.");
-            }
-        } else {
-            JOptionPane.showMessageDialog(this, "이름을 입력하세요.");
-        }
-    }
-
-    // viewEmployeeRecords 수정
-    private void viewEmployeeRecords() {
-        Request request = new Request.Builder()
-                .url(BASE_URL + "api/time-records")
-                .build();
-
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                SwingUtilities.invokeLater(
-                        () -> JOptionPane.showMessageDialog(null, "직원 데이터를 불러오는데 실패했습니다: " + e.getMessage()));
-            }
-
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-                if (response.isSuccessful()) {
-                    String responseBody = response.body().string();
-                    Employee[] employeesFromServer = gson.fromJson(responseBody, Employee[].class);
-
-                    SwingUtilities.invokeLater(() -> {
-                        StringBuilder records = new StringBuilder("<html><body>");
-                        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
-                        for (Employee employee : employeesFromServer) {
-                            records.append(employee.getName())
-                                    .append(" - 출근: ")
-                                    .append(employee.getCheckInTime().format(formatter));
-                            if (employee.getCheckOutTime() != null) {
-                                records.append(", 퇴근: ").append(employee.getCheckOutTime().format(formatter));
-                            } else {
-                                records.append(", 퇴근: 기록 없음");
-                            }
-                            records.append("<br>");
-                        }
-                        records.append("</body></html>");
-
-                        JOptionPane.showMessageDialog(null, new JLabel(records.toString()), "직원 출근/퇴근 기록",
-                                JOptionPane.INFORMATION_MESSAGE);
-                    });
-                } else {
-                    SwingUtilities.invokeLater(
-                            () -> JOptionPane.showMessageDialog(null, "직원 데이터를 불러오는데 실패했습니다: " + response.message()));
-                }
-            }
-        });
-    }
-
-    private void sendEmployeeDataToServer(Employee employee, String action) {
-        try {
-            String jsonData = gson.toJson(employee);
-
-            RequestBody body = RequestBody.create(jsonData, MediaType.get("application/json"));
-            Request request = new Request.Builder()
-                    .url(BASE_URL + "/time-records/" + action) // API 엔드포인트
-                    .post(body)
-                    .build();
-
-            httpClient.newCall(request).enqueue(new Callback() {
-                @Override
-                public void onFailure(Call call, IOException e) {
-                    JOptionPane.showMessageDialog(null, "데이터 전송 실패: " + e.getMessage());
-                }
-
-                @Override
-                public void onResponse(Call call, Response response) throws IOException {
-                    if (response.isSuccessful()) {
-                        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null, "데이터 전송 성공!"));
-                    } else {
-                        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null,
-                                "데이터 전송 실패: " + response.message()));
-                    }
-                }
-            });
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "데이터 전송 실패: " + e.getMessage());
-        }
-
     }
 }
