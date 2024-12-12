@@ -98,7 +98,6 @@ public class FunctionPanel extends JPanel {
     }
 
     private void displayEmptyRequestsUI() {
-        // 요청사항이 없을 경우 빈 화면 표시
         JFrame emptyRequestFrame = new JFrame("요청사항 리스트");
         emptyRequestFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         emptyRequestFrame.setSize(500, 400);
@@ -116,32 +115,28 @@ public class FunctionPanel extends JPanel {
         requestFrame.setSize(500, 400);
         requestFrame.setLayout(new BorderLayout());
 
-        // 요청사항 리스트 패널 생성
         JPanel requestListPanel = new JPanel();
         requestListPanel.setLayout(new BoxLayout(requestListPanel, BoxLayout.Y_AXIS));
 
-        // 요청사항 데이터 출력
         for (JsonElement requestElement : requestArray) {
             JsonObject requestObj = requestElement.getAsJsonObject();
             int tableNum = requestObj.get("tableNum").getAsInt();
             JsonArray requests = requestObj.getAsJsonArray("requests");
+            boolean isCompleted = requestObj.get("isCompleted").getAsBoolean();
 
             for (JsonElement element : requests) {
                 JsonObject requestDetail = element.getAsJsonObject();
+                String requestId = requestObj.get("_id").getAsString();
                 String requestName = requestDetail.get("name").getAsString();
 
-                // 요청사항 항목 생성
                 JPanel requestItemPanel = new JPanel(new BorderLayout());
                 requestItemPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
                 JLabel requestLabel = new JLabel("Table " + tableNum + ": " + requestName);
-                JButton completeButton = new JButton("완료");
+                JButton completeButton = new JButton(isCompleted ? "완료됨" : "완료");
+                completeButton.setEnabled(!isCompleted);
 
-                completeButton.addActionListener(e -> {
-                    completeButton.setEnabled(false);
-                    requestItemPanel.setBackground(Color.LIGHT_GRAY);
-                    completeButton.setText("완료됨");
-                });
+                completeButton.addActionListener(e -> updateRequestStatus(requestId, completeButton, requestItemPanel));
 
                 requestItemPanel.add(requestLabel, BorderLayout.CENTER);
                 requestItemPanel.add(completeButton, BorderLayout.EAST);
@@ -150,14 +145,42 @@ public class FunctionPanel extends JPanel {
             }
         }
 
-        // 스크롤 가능하도록 설정
         JScrollPane scrollPane = new JScrollPane(requestListPanel);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 
-        // 프레임에 스크롤 패널 추가
         requestFrame.add(scrollPane, BorderLayout.CENTER);
         requestFrame.setVisible(true);
+    }
+
+    private void updateRequestStatus(String requestId, JButton completeButton, JPanel requestItemPanel) {
+        RequestBody body = RequestBody.create("", MediaType.get("application/json"));
+        Request request = new Request.Builder()
+                .url(BASE_URL + "api/request?id=" + requestId)
+                .put(body)
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                SwingUtilities
+                        .invokeLater(() -> JOptionPane.showMessageDialog(null, "요청 완료 상태 업데이트 실패: " + e.getMessage()));
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (response.isSuccessful()) {
+                    SwingUtilities.invokeLater(() -> {
+                        completeButton.setEnabled(false);
+                        requestItemPanel.setBackground(Color.LIGHT_GRAY);
+                        completeButton.setText("완료됨");
+                    });
+                } else {
+                    SwingUtilities.invokeLater(
+                            () -> JOptionPane.showMessageDialog(null, "요청 완료 상태 업데이트 실패: " + response.message()));
+                }
+            }
+        });
     }
 
     private void showPopularMenu(List<Order> orderList) {
