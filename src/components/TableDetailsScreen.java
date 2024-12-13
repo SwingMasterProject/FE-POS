@@ -555,7 +555,7 @@ public class TableDetailsScreen extends JFrame {
 
                 SwingUtilities.invokeLater(() -> {
                     if (response.isSuccessful()) {
-                        JOptionPane.showMessageDialog(null, "테이블 결게가 완료 돼었습니다!");
+                        JOptionPane.showMessageDialog(null, "테이블 결제가 완료 되었습니다!");
                     } else {
                         JOptionPane.showMessageDialog(null, "테이블 주문 데이터 삭제 실패: " + response.message());
                     }
