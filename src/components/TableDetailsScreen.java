@@ -41,16 +41,18 @@ public class TableDetailsScreen extends JFrame {
     private void setupScreen(int tableNumber) {
         setTitle("테이블 세부 정보 - Table " + tableNumber);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        setSize(800, 600);
+        setSize(1000, 600); // 전체 창 크기 조정
         setLayout(new BorderLayout(10, 10));
 
         JPanel orderListPanel = createOrderListPanel(tableNumber);
         JPanel menuPanel = createMenuPanel(tableNumber);
         JPanel buttonPanel = createButtonPanel(tableNumber);
 
+        // JSplitPane 설정
         JSplitPane centerSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, orderListPanel, menuPanel);
-        centerSplitPane.setResizeWeight(0.5);
-        centerSplitPane.setDividerSize(5);
+        centerSplitPane.setResizeWeight(0.4); // 주문 목록 패널에 더 많은 공간 할당
+        centerSplitPane.setDividerSize(8); // 구분선 크기 조정
+        centerSplitPane.setDividerLocation(400); // 초기 구분 위치 설정
 
         add(centerSplitPane, BorderLayout.CENTER);
         add(buttonPanel, BorderLayout.SOUTH);
@@ -62,24 +64,35 @@ public class TableDetailsScreen extends JFrame {
         JPanel orderListPanel = new JPanel(new BorderLayout(10, 10));
         orderListPanel.setBorder(BorderFactory.createTitledBorder("주문 목록"));
 
-        JPanel orderItemsPanel = new JPanel(new GridLayout(0, 3, 10, 10)); // 주문 항목
+        // 스크롤 가능한 패널 생성
+        JPanel orderItemsPanel = new JPanel();
+        orderItemsPanel.setLayout(new BoxLayout(orderItemsPanel, BoxLayout.Y_AXIS));
+
         int totalAmount = 0;
 
         for (Order order : orders) {
             if (order.getTableNumber() == tableNumber) {
-                // 주문 정보를 패널에 추가
-                orderItemsPanel.add(new JLabel(order.getItemName()));
-                orderItemsPanel.add(new JLabel("(" + order.getQuantity() + ")"));
-                orderItemsPanel.add(new JLabel(order.getPrice() * order.getQuantity() + "원"));
+                JPanel itemPanel = new JPanel(new GridLayout(1, 3, 5, 5));
+                itemPanel.add(new JLabel(order.getItemName())); // 메뉴 이름
+                itemPanel.add(new JLabel("(" + order.getQuantity() + ")")); // 수량
+                itemPanel.add(new JLabel(order.getPrice() * order.getQuantity() + "원")); // 총 가격
+
+                orderItemsPanel.add(itemPanel); // 항목 추가
                 totalAmount += order.getPrice() * order.getQuantity();
             }
         }
 
-        JLabel totalLabel = new JLabel("<html>합계: " + totalAmount + "원</html>"); // 총 금액
+        JScrollPane scrollPane = new JScrollPane(orderItemsPanel);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+
+        JLabel totalLabel = new JLabel("<html>합계: " + totalAmount + "원</html>");
         totalLabel.setHorizontalAlignment(SwingConstants.RIGHT);
         totalLabel.setFont(new Font("맑은 고딕", Font.BOLD, 14));
 
-        orderListPanel.add(orderItemsPanel, BorderLayout.CENTER);
+        // 패널 크기 조정
+        orderListPanel.setPreferredSize(new Dimension(350, 500)); // 폭과 높이 조정
+        orderListPanel.add(scrollPane, BorderLayout.CENTER);
         orderListPanel.add(totalLabel, BorderLayout.SOUTH);
 
         return orderListPanel;
@@ -94,10 +107,25 @@ public class TableDetailsScreen extends JFrame {
             JButton menuButton = new JButton("<html>" + menu + "<br>" + price + "원</html>");
             menuButton.addActionListener(e -> {
                 String menuId = menuWithIds.get(menu); // menuId 가져오기
-                if (menuId != null) { // menuId가 존재하는지 확인
-                    System.out.println("Selected Menu: " + menu + ", Menu ID: " + menuId); // 디버깅 출력
-                    orders.add(new Order(tableNumber, menuId, menu, 1, price)); // menuId 포함 생성자 사용
-                    refreshScreen(tableNumber);
+                if (menuId != null) {
+                    boolean menuExists = false;
+
+                    // 동일한 메뉴가 있는지 확인
+                    for (Order order : orders) {
+                        if (order.getTableNumber() == tableNumber && order.getMenuId().equals(menuId)) {
+                            order.setQuantity(order.getQuantity() + 1); // 수량 증가
+                            menuExists = true;
+                            break;
+                        }
+                    }
+
+                    // 동일한 메뉴가 없으면 새로 추가
+                    if (!menuExists) {
+                        orders.add(new Order(tableNumber, menuId, menu, 1, price));
+                    }
+
+                    System.out.println("현재 orders 상태: " + orders); // 디버깅 출력
+                    updateOrderListPanel(tableNumber); // UI 갱신
                 } else {
                     JOptionPane.showMessageDialog(this, "선택한 메뉴의 ID를 찾을 수 없습니다: " + menu);
                 }
@@ -137,10 +165,21 @@ public class TableDetailsScreen extends JFrame {
 
         JButton orderButton = new JButton("주문하기");
         orderButton.addActionListener(e -> {
-            sendOrdersToServer(tableNumber);
+            sendOrdersToServer(tableNumber); // 서버로 주문 데이터 전송
             JOptionPane.showMessageDialog(this, "주문이 완료되었습니다!");
-            mainScreen.updateTable(tableNumber, new ArrayList<>(orders));
-            dispose();
+
+            // 주문이 완료된 테이블의 상태 업데이트
+            List<Order> tableOrders = new ArrayList<>();
+            for (Order order : orders) {
+                if (order.getTableNumber() == tableNumber) {
+                    tableOrders.add(order); // 해당 테이블의 주문 데이터 수집
+                }
+            }
+
+            // MainScreen에서 해당 테이블만 업데이트
+            mainScreen.updateSpecificTable(tableNumber, tableOrders);
+
+            dispose(); // 현재 화면 닫기
         });
 
         buttonPanel.add(cancelButton);
@@ -322,16 +361,44 @@ public class TableDetailsScreen extends JFrame {
     // 주문 목록 패널 업데이트 메서드
     private void updateOrderListPanel(int tableNumber) {
         SwingUtilities.invokeLater(() -> {
-            // 현재 orderListPanel을 새로 생성
-            JPanel updatedOrderListPanel = createOrderListPanel(tableNumber);
+            JSplitPane splitPane = (JSplitPane) getContentPane().getComponent(0); // 현재 SplitPane 가져오기
+            JScrollPane scrollPane = (JScrollPane) ((JPanel) splitPane.getLeftComponent()).getComponent(0); // 기존
+                                                                                                            // ScrollPane
+                                                                                                            // 가져오기
+            JPanel orderItemsPanel = (JPanel) scrollPane.getViewport().getView(); // 기존 Panel 가져오기
 
-            // 기존 패널을 제거하고 새로운 패널로 교체
-            JSplitPane splitPane = (JSplitPane) getContentPane().getComponent(0);
-            splitPane.setLeftComponent(updatedOrderListPanel);
+            // 기존 항목 삭제 및 다시 추가
+            orderItemsPanel.removeAll();
 
-            // 화면 갱신
-            revalidate();
-            repaint();
+            int totalAmount = 0;
+            for (Order order : orders) {
+                if (order.getTableNumber() == tableNumber) {
+                    JPanel itemPanel = new JPanel(new GridLayout(1, 3, 5, 5));
+                    itemPanel.add(new JLabel(order.getItemName()));
+                    itemPanel.add(new JLabel("(" + order.getQuantity() + ")"));
+                    itemPanel.add(new JLabel(order.getPrice() * order.getQuantity() + "원"));
+
+                    orderItemsPanel.add(itemPanel);
+                    totalAmount += order.getPrice() * order.getQuantity();
+                }
+            }
+
+            // UI 갱신
+            orderItemsPanel.revalidate();
+            orderItemsPanel.repaint();
+
+            // 총 금액 라벨 갱신
+            JLabel totalLabel = new JLabel("<html>합계: " + totalAmount + "원</html>");
+            totalLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+            totalLabel.setFont(new Font("맑은 고딕", Font.BOLD, 14));
+
+            JPanel leftPanel = (JPanel) splitPane.getLeftComponent();
+            leftPanel.removeAll();
+            leftPanel.add(scrollPane, BorderLayout.CENTER);
+            leftPanel.add(totalLabel, BorderLayout.SOUTH);
+
+            leftPanel.revalidate();
+            leftPanel.repaint();
         });
     }
 

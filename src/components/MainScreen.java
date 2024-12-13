@@ -63,11 +63,13 @@ public class MainScreen extends JPanel {
             if (order.getTableNumber() == tableNumber) {
                 hasOrder = true;
 
+                // 합계 금액 계산
                 int total = orders.stream()
                         .filter(o -> o.getTableNumber() == tableNumber)
                         .mapToInt(o -> o.getPrice() * o.getQuantity())
                         .sum();
 
+                // UI 업데이트
                 String summaryText = String.format(
                         "<html><center>%s 외 %d개<br>합계: %d원</center></html>",
                         order.getItemName(),
@@ -75,13 +77,7 @@ public class MainScreen extends JPanel {
                         total);
 
                 orderSummaryLabel.setText(summaryText);
-
-                // 예약된 테이블인지 확인하고 색상 설정
-                if (reservedTables.contains(tableNumber)) {
-                    tableButton.setBackground(Color.CYAN); // 예약된 테이블은 파란색으로 표시
-                } else {
-                    tableButton.setBackground(Color.PINK); // 일반 주문 테이블은 핑크색으로 표시
-                }
+                tableButton.setBackground(Color.PINK); // 주문이 있는 테이블은 핑크색으로 표시
 
                 return; // 주문이 있으면 더 이상 탐색하지 않음
             }
@@ -89,13 +85,8 @@ public class MainScreen extends JPanel {
 
         // 주문이 없는 경우 처리
         if (!hasOrder) {
-            if (reservedTables.contains(tableNumber)) {
-                tableButton.setBackground(Color.BLUE); // 예약 상태지만 주문이 없는 테이블
-                orderSummaryLabel.setText("<html><center>Reserved</center></html>");
-            } else {
-                tableButton.setBackground(Color.LIGHT_GRAY); // 기본 색상
-                orderSummaryLabel.setText("<html><center>No Orders</center></html>");
-            }
+            tableButton.setBackground(Color.LIGHT_GRAY); // 기본 색상
+            orderSummaryLabel.setText("<html><center>No Orders</center></html>");
         }
     }
 
@@ -110,11 +101,11 @@ public class MainScreen extends JPanel {
     }
 
     public void updateSpecificTable(int tableNumber, List<Order> updatedOrders) {
-        // 기존 테이블의 주문 상태 업데이트
+        // 기존 테이블의 주문 데이터 갱신
         orders.removeIf(order -> order.getTableNumber() == tableNumber);
         orders.addAll(updatedOrders);
 
-        // 특정 테이블 버튼 갱신
+        // 특정 테이블 버튼 UI 갱신
         Component[] components = getComponents();
         for (Component component : components) {
             if (component instanceof JPanel) {
@@ -122,11 +113,11 @@ public class MainScreen extends JPanel {
                 for (Component button : panel.getComponents()) {
                     if (button instanceof JButton) {
                         JButton tableButton = (JButton) button;
-                        JLabel label = (JLabel) tableButton.getComponent(1); // 버튼의 두 번째 컴포넌트 (라벨)
 
                         // 테이블 번호 확인
                         if (tableButton.getText() != null && tableButton.getText().contains("Table " + tableNumber)) {
-                            updateButtonAppearance(tableButton, label, tableNumber);
+                            JLabel orderSummaryLabel = (JLabel) tableButton.getComponent(1); // 버튼의 두 번째 컴포넌트 (라벨)
+                            updateButtonAppearance(tableButton, orderSummaryLabel, tableNumber); // UI 업데이트
                             break;
                         }
                     }
@@ -134,7 +125,7 @@ public class MainScreen extends JPanel {
             }
         }
 
-        // UI 갱신
+        // UI 강제 갱신
         revalidate();
         repaint();
     }
