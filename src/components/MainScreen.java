@@ -109,6 +109,36 @@ public class MainScreen extends JPanel {
         repaint(); // 변경된 UI 반영
     }
 
+    public void updateSpecificTable(int tableNumber, List<Order> updatedOrders) {
+        // 기존 테이블의 주문 상태 업데이트
+        orders.removeIf(order -> order.getTableNumber() == tableNumber);
+        orders.addAll(updatedOrders);
+
+        // 특정 테이블 버튼 갱신
+        Component[] components = getComponents();
+        for (Component component : components) {
+            if (component instanceof JPanel) {
+                JPanel panel = (JPanel) component;
+                for (Component button : panel.getComponents()) {
+                    if (button instanceof JButton) {
+                        JButton tableButton = (JButton) button;
+                        JLabel label = (JLabel) tableButton.getComponent(1); // 버튼의 두 번째 컴포넌트 (라벨)
+
+                        // 테이블 번호 확인
+                        if (tableButton.getText() != null && tableButton.getText().contains("Table " + tableNumber)) {
+                            updateButtonAppearance(tableButton, label, tableNumber);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // UI 갱신
+        revalidate();
+        repaint();
+    }
+
     public void updateTable(int tableNumber, List<Order> updatedOrders) {
         System.out.println("업데이트된 테이블 번호: " + tableNumber);
         System.out.println("업데이트된 주문 데이터: " + updatedOrders);

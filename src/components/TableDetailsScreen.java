@@ -155,7 +155,7 @@ public class TableDetailsScreen extends JFrame {
 
     // 주문 초기화 API 호출 메서드
     private void clearOrdersFromServer(int tableNumber) {
-        String url = "https://be-api-takaaaans-projects.vercel.app/api/table?tableNum=" + tableNumber;
+        String url = BASE_URL + "api/table?tableNum=" + tableNumber;
 
         Request request = new Request.Builder()
                 .url(url)
@@ -183,8 +183,11 @@ public class TableDetailsScreen extends JFrame {
 
                     if (success) {
                         SwingUtilities.invokeLater(() -> {
-                            // 메인 화면 갱신
-                            mainScreen.updateTable(tableNumber, new ArrayList<>());
+                            // 해당 테이블의 주문 삭제
+                            orders.removeIf(order -> order.getTableNumber() == tableNumber);
+
+                            // MainScreen에서 해당 테이블 UI 갱신
+                            mainScreen.updateSpecificTable(tableNumber, new ArrayList<>());
 
                             // 초기화 성공 메시지
                             JOptionPane.showMessageDialog(
@@ -193,7 +196,7 @@ public class TableDetailsScreen extends JFrame {
                                     "성공",
                                     JOptionPane.INFORMATION_MESSAGE);
 
-                            // 창 닫기
+                            // 현재 화면 닫기
                             dispose();
                         });
                     } else {
