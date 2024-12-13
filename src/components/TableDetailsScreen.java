@@ -73,9 +73,9 @@ public class TableDetailsScreen extends JFrame {
             }
         }
 
-        JLabel totalLabel = new JLabel("합계: " + totalAmount + "원"); // 총 금액
+        JLabel totalLabel = new JLabel("<html>합계: " + totalAmount + "원</html>"); // 총 금액
         totalLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-        totalLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        totalLabel.setFont(new Font("맑은 고딕", Font.BOLD, 14));
 
         orderListPanel.add(orderItemsPanel, BorderLayout.CENTER);
         orderListPanel.add(totalLabel, BorderLayout.SOUTH);
@@ -112,8 +112,7 @@ public class TableDetailsScreen extends JFrame {
 
         JButton cancelButton = new JButton("전체 취소");
         cancelButton.addActionListener(e -> {
-            clearOrdersForTable(tableNumber);
-            refreshScreen(tableNumber);
+            clearOrdersFromServer(tableNumber);
         });
 
         JButton plusButton = new JButton("+");
@@ -149,6 +148,71 @@ public class TableDetailsScreen extends JFrame {
         buttonPanel.add(orderButton);
 
         return buttonPanel;
+    }
+
+    // 주문 초기화 API 호출 메서드
+    private void clearOrdersFromServer(int tableNumber) {
+        String url = "https://be-api-takaaaans-projects.vercel.app/api/table?tableNum=" + tableNumber;
+
+        Request request = new Request.Builder()
+                .url(url)
+                .delete() // DELETE 요청
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(
+                            null,
+                            "주문 초기화 중 오류가 발생했습니다: " + e.getMessage(),
+                            "오류",
+                            JOptionPane.ERROR_MESSAGE);
+                });
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (response.isSuccessful() && response.body() != null) {
+                    String responseBody = response.body().string();
+                    JsonObject responseJson = gson.fromJson(responseBody, JsonObject.class);
+                    boolean success = responseJson.get("success").getAsBoolean();
+
+                    if (success) {
+                        SwingUtilities.invokeLater(() -> {
+                            // 메인 화면 갱신
+                            mainScreen.updateTable(tableNumber, new ArrayList<>());
+
+                            // 초기화 성공 메시지
+                            JOptionPane.showMessageDialog(
+                                    null,
+                                    responseJson.get("message").getAsString(),
+                                    "성공",
+                                    JOptionPane.INFORMATION_MESSAGE);
+
+                            // 창 닫기
+                            dispose();
+                        });
+                    } else {
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(
+                                    null,
+                                    "주문 초기화 실패: " + responseJson.get("message").getAsString(),
+                                    "오류",
+                                    JOptionPane.ERROR_MESSAGE);
+                        });
+                    }
+                } else {
+                    SwingUtilities.invokeLater(() -> {
+                        JOptionPane.showMessageDialog(
+                                null,
+                                "주문 초기화 실패: 응답을 받지 못했습니다.",
+                                "오류",
+                                JOptionPane.ERROR_MESSAGE);
+                    });
+                }
+            }
+        });
     }
 
     private void sendOrdersToServer(int tableNumber) {
@@ -241,11 +305,28 @@ public class TableDetailsScreen extends JFrame {
 
     private void reserveTable(int tableNumber) {
         if (!reservedTables.contains(tableNumber)) {
-            reservedTables.add(tableNumber);
+            mainScreen.reserveTable(tableNumber); // 예약 상태 전달
             JOptionPane.showMessageDialog(this, "Table " + tableNumber + "이(가) 예약되었습니다!");
+            dispose(); // 화면 닫기
         } else {
             JOptionPane.showMessageDialog(this, "Table " + tableNumber + "은(는) 이미 예약되었습니다.");
         }
+    }
+
+    // 주문 목록 패널 업데이트 메서드
+    private void updateOrderListPanel(int tableNumber) {
+        SwingUtilities.invokeLater(() -> {
+            // 현재 orderListPanel을 새로 생성
+            JPanel updatedOrderListPanel = createOrderListPanel(tableNumber);
+
+            // 기존 패널을 제거하고 새로운 패널로 교체
+            JSplitPane splitPane = (JSplitPane) getContentPane().getComponent(0);
+            splitPane.setLeftComponent(updatedOrderListPanel);
+
+            // 화면 갱신
+            revalidate();
+            repaint();
+        });
     }
 
     private void initializeMenusFromAPI(Runnable onComplete) {
