@@ -161,8 +161,17 @@ public class TableDetailsScreen extends JFrame {
         });
 
         JButton reserveButton = new JButton("예약");
-        reserveButton.addActionListener(e -> reserveTable(tableNumber));
+        reserveButton.addActionListener(e -> {
+            if (!reservedTables.contains(tableNumber)) {
+                mainScreen.reserveTable(tableNumber);
+                JOptionPane.showMessageDialog(this, "Table " + tableNumber + "이(가) 예약되었습니다!");
+            } else {
+                JOptionPane.showMessageDialog(this, "Table " + tableNumber + "은(는) 이미 예약되었습니다.");
+            }
 
+            // 현재 화면 닫기
+            dispose();
+        });
         JButton orderButton = new JButton("주문하기");
         orderButton.addActionListener(e -> {
             sendOrdersToServer(tableNumber); // 서버로 주문 데이터 전송
@@ -178,6 +187,9 @@ public class TableDetailsScreen extends JFrame {
 
             // MainScreen에서 해당 테이블만 업데이트
             mainScreen.updateSpecificTable(tableNumber, tableOrders);
+
+            // 예약 상태가 있더라도 주문 상태로 갱신
+            mainScreen.removeReservation(tableNumber);
 
             dispose(); // 현재 화면 닫기
         });

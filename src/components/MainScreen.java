@@ -57,8 +57,15 @@ public class MainScreen extends JPanel {
     }
 
     private void updateButtonAppearance(JButton tableButton, JLabel orderSummaryLabel, int tableNumber) {
-        boolean hasOrder = false;
+        // 예약 상태 우선 적용
+        if (reservedTables.contains(tableNumber)) {
+            tableButton.setBackground(Color.CYAN); // 예약 상태는 파란색
+            orderSummaryLabel.setText("<html><center>Reserved</center></html>");
+            return; // 예약 상태인 경우 더 이상 처리하지 않음
+        }
 
+        // 테이블에 주문이 있는지 확인
+        boolean hasOrder = false;
         for (Order order : orders) {
             if (order.getTableNumber() == tableNumber) {
                 hasOrder = true;
@@ -69,7 +76,7 @@ public class MainScreen extends JPanel {
                         .mapToInt(o -> o.getPrice() * o.getQuantity())
                         .sum();
 
-                // UI 업데이트
+                // 주문 상태에 따른 UI 업데이트
                 String summaryText = String.format(
                         "<html><center>%s 외 %d개<br>합계: %d원</center></html>",
                         order.getItemName(),
@@ -77,13 +84,13 @@ public class MainScreen extends JPanel {
                         total);
 
                 orderSummaryLabel.setText(summaryText);
-                tableButton.setBackground(Color.PINK); // 주문이 있는 테이블은 핑크색으로 표시
+                tableButton.setBackground(Color.PINK); // 주문 상태는 핑크색
 
-                return; // 주문이 있으면 더 이상 탐색하지 않음
+                return; // 주문 상태 처리 후 종료
             }
         }
 
-        // 주문이 없는 경우 처리
+        // 주문이 없는 경우 기본 상태로 처리
         if (!hasOrder) {
             tableButton.setBackground(Color.LIGHT_GRAY); // 기본 색상
             orderSummaryLabel.setText("<html><center>No Orders</center></html>");
@@ -94,10 +101,30 @@ public class MainScreen extends JPanel {
         if (!reservedTables.contains(tableNumber)) {
             reservedTables.add(tableNumber); // 예약된 테이블 추가
         }
-        removeAll(); // 기존 UI 제거
-        createMainScreen(); // 새로운 UI 생성
+
+        // 특정 테이블 버튼의 UI 갱신
+        Component[] components = getComponents();
+        for (Component component : components) {
+            if (component instanceof JPanel) {
+                JPanel panel = (JPanel) component;
+                for (Component button : panel.getComponents()) {
+                    if (button instanceof JButton) {
+                        JButton tableButton = (JButton) button;
+
+                        // 테이블 번호 확인
+                        JLabel tableLabel = (JLabel) tableButton.getComponent(0); // 첫 번째 컴포넌트는 테이블 번호
+                        if (tableLabel.getText().contains("Table " + tableNumber)) {
+                            tableButton.setBackground(Color.CYAN); // 배경색을 파란색으로 변경
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // UI 강제 갱신
         revalidate();
-        repaint(); // 변경된 UI 반영
+        repaint();
     }
 
     public void updateSpecificTable(int tableNumber, List<Order> updatedOrders) {
@@ -115,8 +142,9 @@ public class MainScreen extends JPanel {
                         JButton tableButton = (JButton) button;
 
                         // 테이블 번호 확인
-                        if (tableButton.getText() != null && tableButton.getText().contains("Table " + tableNumber)) {
-                            JLabel orderSummaryLabel = (JLabel) tableButton.getComponent(1); // 버튼의 두 번째 컴포넌트 (라벨)
+                        JLabel tableLabel = (JLabel) tableButton.getComponent(0); // 첫 번째 컴포넌트는 테이블 번호
+                        if (tableLabel.getText().contains("Table " + tableNumber)) {
+                            JLabel orderSummaryLabel = (JLabel) tableButton.getComponent(1); // 두 번째 컴포넌트 (라벨)
                             updateButtonAppearance(tableButton, orderSummaryLabel, tableNumber); // UI 업데이트
                             break;
                         }
@@ -139,6 +167,10 @@ public class MainScreen extends JPanel {
         createMainScreen(); // 새로운 UI 생성
         revalidate();
         repaint();
+    }
+
+    public void removeReservation(int tableNumber) {
+        reservedTables.removeIf(reservedTable -> reservedTable == tableNumber);
     }
 
 }
