@@ -15,12 +15,15 @@ import java.util.ArrayList;
 import java.util.List;
 import okhttp3.*;
 
+import javax.swing.Timer;
+
 public class POSLayout extends JFrame {
     private final List<Order> orders;
     private final OkHttpClient httpClient = new OkHttpClient();
     private final Gson gson = new Gson();
-    private MainScreen mainScreen; // 클래스 변수로 선언
+    private MainScreen mainScreen;
     private static final String BASE_URL = "https://be-api-seven.vercel.app/";
+    private Timer refreshTimer;
 
     public POSLayout() {
         setTitle("POS System");
@@ -39,10 +42,23 @@ public class POSLayout extends JFrame {
         FunctionPanel functionPanel = new FunctionPanel(orders, mainScreen);
         add(functionPanel, BorderLayout.EAST);
 
-        // API 호출로 초기 데이터 가져오기
-        initializeOrders();
+        // タイマーで一定時間ごとに初期化を実行
+        startAutoRefresh();
 
         setVisible(true);
+    }
+
+    private void startAutoRefresh() {
+        // 5秒ごとにデータを更新
+        int refreshInterval = 5000; // ミリ秒単位
+        refreshTimer = new Timer(refreshInterval, e -> initializeOrders());
+        refreshTimer.start();
+    }
+
+    private void stopAutoRefresh() {
+        if (refreshTimer != null) {
+            refreshTimer.stop();
+        }
     }
 
     private void initializeOrders() {
@@ -70,7 +86,6 @@ public class POSLayout extends JFrame {
                         orders.clear(); // 기존 데이터 초기화
 
                         // 테이블 데이터 처리
-                        // 테이블 데이터 처리
                         for (JsonElement element : tableData) {
                             if (!element.isJsonObject()) {
                                 System.out.println("Invalid table data: not a JSON object.");
@@ -78,9 +93,7 @@ public class POSLayout extends JFrame {
                             }
 
                             JsonObject tableObject = element.getAsJsonObject();
-                            int tableNum = tableObject.has("tableNum") ? tableObject.get("tableNum").getAsInt() : -1; // 테이블
-                                                                                                                      // 번호
-                                                                                                                      // 기본값
+                            int tableNum = tableObject.has("tableNum") ? tableObject.get("tableNum").getAsInt() : -1;
 
                             if (!tableObject.has("lastOrder") || !tableObject.get("lastOrder").isJsonArray()) {
                                 System.out.println("Invalid table data: 'lastOrder' is missing or not a JSON array.");
@@ -101,11 +114,10 @@ public class POSLayout extends JFrame {
                                         && orderObject.has("price")) {
                                     String itemName = orderObject.get("name").getAsString();
                                     String menuId = orderObject.has("menuId") ? orderObject.get("menuId").getAsString()
-                                            : null; // 메뉴 ID 처리
+                                            : null;
                                     int quantity = orderObject.get("quantity").getAsInt();
                                     int price = orderObject.get("price").getAsInt();
 
-                                    // `orders`에 추가
                                     orders.add(new Order(tableNum, menuId, itemName, quantity, price));
                                 } else {
                                     System.out.println("Invalid order object: missing required fields.");
