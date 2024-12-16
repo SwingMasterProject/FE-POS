@@ -12,6 +12,10 @@ import com.google.gson.JsonObject;
 
 import java.awt.*;
 import java.io.IOException;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -231,13 +235,25 @@ public class FunctionPanel extends JPanel {
 
                                 for (JsonElement recordElement : records) {
                                     JsonObject record = recordElement.getAsJsonObject();
-                                    String clockIn = record.has("clock_in") ? record.get("clock_in").getAsString()
-                                            : "출근 기록 없음";
-                                    String clockOut = record.has("clock_out") ? record.get("clock_out").getAsString()
-                                            : "퇴근 기록 없음";
-                                    double workingHours = record.has("total_working_hours")
-                                            ? record.get("total_working_hours").getAsDouble()
-                                            : 0.0;
+                                    String clockIn = "출근 기록 없음";
+                                    String clockOut = "퇴근 기록 없음";
+                                    double workingHours = 0.0;
+
+                                    // clock_in 처리
+                                    if (record.has("clock_in") && !record.get("clock_in").isJsonNull()) {
+                                        clockIn = convertToSeoulTime(record.get("clock_in").getAsString());
+                                    }
+
+                                    // clock_out 처리
+                                    if (record.has("clock_out") && !record.get("clock_out").isJsonNull()) {
+                                        clockOut = convertToSeoulTime(record.get("clock_out").getAsString());
+                                    }
+
+                                    // total_working_hours 처리
+                                    if (record.has("total_working_hours")
+                                            && !record.get("total_working_hours").isJsonNull()) {
+                                        workingHours = record.get("total_working_hours").getAsDouble();
+                                    }
 
                                     recordDetails.append("출근: ").append(clockIn)
                                             .append(", 퇴근: ").append(clockOut)
@@ -247,8 +263,9 @@ public class FunctionPanel extends JPanel {
                                 }
 
                                 double totalHours = jsonResponse.has("total_working_hours")
-                                        ? jsonResponse.get("total_working_hours").getAsDouble()
-                                        : 0.0;
+                                        && !jsonResponse.get("total_working_hours").isJsonNull()
+                                                ? jsonResponse.get("total_working_hours").getAsDouble()
+                                                : 0.0;
 
                                 recordDetails.append("\n총 근무 시간: ").append(String.format("%.2f", totalHours))
                                         .append("시간");
@@ -266,6 +283,18 @@ public class FunctionPanel extends JPanel {
                     }
                 });
             });
+        }
+
+        private String convertToSeoulTime(String utcTime) {
+            try {
+                // UTC 시간 문자열을 파싱
+                Instant instant = Instant.parse(utcTime); // 예: "2024-12-17T12:00:00Z"
+                ZonedDateTime seoulTime = instant.atZone(ZoneId.of("Asia/Seoul")); // 서울 시간으로 변환
+                return seoulTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")); // 원하는 포맷으로 출력
+            } catch (Exception e) {
+                e.printStackTrace();
+                return "시간 변환 오류";
+            }
         }
 
         private void fetchUserId(String name, java.util.function.Consumer<String> callback) {
